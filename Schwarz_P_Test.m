@@ -724,40 +724,228 @@ close all;
 figure(1)
 view(3)
 hold on;
+
+quad_list = zeros(max(indices,[],"all"),4);
+quad_count = 0;
+tri_list = zeros(max(indices,[],"all"),3);
+tri_count = 0;
+mid_point_array = zeros(1,width(x));
+mid_point_count = zeros(1,width(x));
+
+for i = 1:width(x)
+    mid_point_array(1,i) = indices(floor(count_v_all(i)/2),i);
+    mid_point_count(1,i) = floor(count_v_all(i)/2);
+end
+for i = 1:width(x)-1
+    if is_div_line(frac*(i-1)+1)
+        continue 
+    end
+    p_i = p_array(mid_point_array(1,i),:);
+    for j = i+1:width(x)
+        if is_div_line(frac*(j-1)+1)
+            continue 
+        end
+        p_j = p_array(mid_point_array(1,j),:);
+        if (p_i-p_j)*transpose(p_i-p_j) < (frac*ds)^2
+            mid_point_array(1,j) = mid_point_array(1,i);
+            indices(mid_point_count(1,j),j) = mid_point_array(1,i);
+        end
+    end
+end
+clear I p_i p_j
+
 for i = 1:6
     m = [face_indices(i):face_indices(i+1)-1,face_indices(i)];
     for k = 1:width(m)-1
         if is_div_line((face_indices(i)+k-2)*frac+1)
             m = [m(1:k-1),m(k+1:end)];
+            if k == 1
+                m(1,width(m)) = m(1,1);
+            elseif k == width(m)
+                m(1,1) = m(1,width(m));
+            end
         end
     end
-    for j = 1:frac:min(h)
+
+    array = mid_point_array(m);
+    plot3(p_array(array,1),p_array(array,2),p_array(array,3),"-o","MarkerSize",4,"Color","b")
+    
+    for j = 1:frac:min(floor(count_v_all(m)/2))
         array = indices(j,m);
-        for k = 1:width(m)-1
-            for j_ = max(j-frac,1):j+frac
-                if array(k) == indices(j_,m(k+1))
-                    array(k) = min(array(k),array(k+1));
+        if j > 1
+            merge_indices = zeros(1,width(m));
+            for k = 1:width(m)-1
+                p1 = p_array(array(k),:);
+                p2 = p_array(array(k+1),:);
+                if (p1-p2)*transpose(p1-p2) < (frac*ds/3)^2
                     array(k+1) = array(k);
+                    merge_indices(1,k) = 1;
+                    tri_count = tri_count+1;
+                    tri_list(tri_count,1) = array(k);
+                    tri_list(tri_count,2) = old_array(k);
+                    tri_list(tri_count,3) = old_array(k+1);
+                else
+                    for j_ = max(j-frac,1):j+frac
+                        if array(k) == indices(j_,m(k+1))
+                            array(k) = min(array(k),array(k+1));
+                            merge_indices(1,k) = 1;
+                            tri_count = tri_count+1;
+                            tri_list(tri_count,1) = array(k);
+                            tri_list(tri_count,2) = old_array(k);
+                            tri_list(tri_count,3) = old_array(k+1);
+                        end
+                    end
+                end
+                clear p1 p2
+                if ~merge_indices(k)
+                    quad_count = quad_count+1;
+                    quad_list(quad_count,1) = array(k);
+                    quad_list(quad_count,2) = array(k+1);
+                    quad_list(quad_count,3) = old_array(k+1);
+                    quad_list(quad_count,4) = old_array(k);
+                end
+            end
+            count = 0;
+            for k = 1:width(merge_indices)-1
+                if merge_indices(1,k) == 1
+                    m = [m(1:k-count),m(k+2-count:end)];
+                    if k == 1
+                        m(1,width(m)) = m(1,1);
+                    elseif k == width(m)
+                        m(1,1) = m(1,width(m));
+                    end
+                    count = count+1;
+                    array = [array(1:k-count),array(k+2-count:end)];
                 end
             end
         end
-        plot3(p_array(array,1),p_array(array,2),p_array(array,3),"-o","MarkerSize",4,"Color","b")
+        old_array = array;
+        clear count merge_indices
+        %plot3(p_array(array,1),p_array(array,2),p_array(array,3),"-o","MarkerSize",4,"Color","b")
     end
-    array = zeros(1,width(m));
-    for j = 1:width(m)
-        array(1,j) = indices(floor(count_v_all(m(j))/2),m(j));
-    end
-    plot3(p_array(array,1),p_array(array,2),p_array(array,3),"-o","MarkerSize",4,"Color","b")
-end
-clear array
-for i = 1:width(x)
-    if ~is_div_line(1+frac*(i-1))
-        plot3(x(1:count_v_all(i),i), y(1:count_v_all(i),i),...
-            z(1:count_v_all(i),i), "-", "Color", "k")
-        if count_v_all(i) > 1
-            scatter3(x(1,i),y(1,i),z(1,i),36,[0 0 1])
+    j_max = j;
+    merge_indices = zeros(1,width(m));
+    next_p = zeros(1,width(m));
+    for j = j_max:frac:max(mid_point_count(1,m))
+        k = 1;
+        count = 0;
+        while k < width(m)
+            if j > mid_point_count(1,m(k)) || merge_indices(1,count+k) == 1
+                m = [m(1:k-1),m(k+1:end)];
+                count = count+1;
+                if k == 1
+                    m(1,width(m)) = m(1,1);
+                elseif k == width(m)
+                    m(1,1) = m(1,width(m));
+                end
+            else
+                if indices(j,m(k)) ~= next_p(1,count+k) && next_p(1,count+k) ~= 0
+                    indices(j,m(k)) = next_p(1,count+k);
+                end
+                k = k+1;
+            end
         end
+        next_p = zeros(1,width(m));
+        for k = 1:width(m)-1
+            p_midpoint = p_array(mid_point_array(1,m(k)),:);  
+            p = p_array(indices(j,m(k)),:);
+            merge_indices = zeros(1,width(m));
+            if (p_midpoint-p)*transpose(p_midpoint-p) < (frac*ds/2)^2 ...
+                    || j+frac > mid_point_count(1,m(k))
+                next_p(1,k) = mid_point_array(1,m(k));
+            else
+                p_ = p_array(indices(j+frac,m(k)),:);
+                if (p_-p_midpoint)*transpose(p_-p_midpoint) < (frac*ds/2)^2
+                    next_p(1,k) = mid_point_array(1,m(k));
+                    merge_indices(1,k) = 1;
+                else    
+                    next_p(1,k) = indices(j+frac,m(k));
+                end
+            end
+            p_ = p_array(indices(j,m(k+1)),:);
+            if (p_-p)*transpose(p_-p) < (frac*ds/2)^2
+                merge_indices(1,k) = 1;
+            end
+            %scatter3(p(1),p(2),p(3),36,[1 0 1])
+        end
+        next_p(1,width(next_p)) = next_p(1,1); 
+        for k = 1:width(m)-1
+            p = p_array(indices(j,m(k)),:);
+            p_ = p_array(indices(j,m(k+1)),:);
+            if (p-p_)*transpose(p-p_) > (5*frac*ds)^2
+                continue
+            end
+            use_quad = 1;
+            if next_p(1,k) == next_p(1,k+1)
+                use_quad = 0;
+                tri_count = tri_count+1;
+                tri_list(tri_count,1) = indices(j,m(k));
+                tri_list(tri_count,2) = indices(j,m(k+1));
+                tri_list(tri_count,3) = next_p(1,k);
+            elseif next_p(1,k) == mid_point_array(1,m(k))
+                if next_p(1,k+1) ~= mid_point_array(1,m(k+1))
+                    tri_count = tri_count+1;
+                    tri_list(tri_count,1) = next_p(1,k);
+                    tri_list(tri_count,2) = next_p(1,k+1);
+                    tri_list(tri_count,3) = mid_point_array(1,m(k+1));
+                end
+            elseif next_p(1,k+1) == mid_point_array(1,m(k+1))
+                tri_count = tri_count+1;
+                tri_list(tri_count,1) = next_p(1,k);
+                tri_list(tri_count,2) = next_p(1,k+1);
+                tri_list(tri_count,3) = mid_point_array(1,m(k));
+            end
+            if indices(j,m(k)) == next_p(1,k) || ...
+                    indices(j,m(k+1)) == next_p(1,k+1)
+                use_quad = 0;
+            end
+            if use_quad
+                quad_count = quad_count+1;
+                quad_list(quad_count,1) = indices(j,m(k));
+                quad_list(quad_count,2) = indices(j,m(k+1));
+                quad_list(quad_count,3) = next_p(1,k+1);
+                quad_list(quad_count,4) = next_p(1,k);
+            end
+        end
+        clear use_quad count p p_ p_midpoint
     end
+end
+clear array j_max m old_array next_p p p_midpoint
+
+% for i = 1:width(x)
+%     if ~is_div_line(1+frac*(i-1))
+%         plot3(x(1:count_v_all(i),i), y(1:count_v_all(i),i),...
+%             z(1:count_v_all(i),i), "-", "Color", "k")
+%         if count_v_all(i) > 1
+%             scatter3(x(1,i),y(1,i),z(1,i),36,[0 0 1])
+%         end
+%     end
+% end
+
+for i = 1:quad_count
+    plot3([p_array(quad_list(i,1),1),p_array(quad_list(i,2),1)],...
+        [p_array(quad_list(i,1),2),p_array(quad_list(i,2),2)],...
+        [p_array(quad_list(i,1),3),p_array(quad_list(i,2),3)],"-",Color="g",LineWidth=0.8)
+    plot3([p_array(quad_list(i,2),1),p_array(quad_list(i,3),1)],...
+        [p_array(quad_list(i,2),2),p_array(quad_list(i,3),2)],...
+        [p_array(quad_list(i,2),3),p_array(quad_list(i,3),3)],"-",Color="g",LineWidth=0.8)
+    plot3([p_array(quad_list(i,3),1),p_array(quad_list(i,4),1)],...
+        [p_array(quad_list(i,3),2),p_array(quad_list(i,4),2)],...
+        [p_array(quad_list(i,3),3),p_array(quad_list(i,4),3)],"-",Color="g",LineWidth=0.8)
+    plot3([p_array(quad_list(i,4),1),p_array(quad_list(i,1),1)],...
+        [p_array(quad_list(i,4),2),p_array(quad_list(i,1),2)],...
+        [p_array(quad_list(i,4),3),p_array(quad_list(i,1),3)],"-",Color="g",LineWidth=0.8)
+end
+for i = 1:tri_count
+    plot3([p_array(tri_list(i,1),1),p_array(tri_list(i,2),1)],...
+        [p_array(tri_list(i,1),2),p_array(tri_list(i,2),2)],...
+        [p_array(tri_list(i,1),3),p_array(tri_list(i,2),3)],"-",Color="r")
+    plot3([p_array(tri_list(i,2),1),p_array(tri_list(i,3),1)],...
+        [p_array(tri_list(i,2),2),p_array(tri_list(i,3),2)],...
+        [p_array(tri_list(i,2),3),p_array(tri_list(i,3),3)],"-",Color="r")
+    plot3([p_array(tri_list(i,3),1),p_array(tri_list(i,1),1)],...
+        [p_array(tri_list(i,3),2),p_array(tri_list(i,1),2)],...
+        [p_array(tri_list(i,3),3),p_array(tri_list(i,1),3)],"-",Color="r")
 end
 
 %%
