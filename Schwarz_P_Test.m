@@ -139,330 +139,11 @@ for i = (1:width(x))
     end
 end
 
-is_div_line = zeros(1,width(x));
-for i = 1:width(x)-1
-    i_ = i+1;
-    k = 0;
-    for j = 1:6
-        if i_ == face_indices(1,j)
-            k = 1;
-            break
-        end
-    end
-    if k
-        continue
-    end
-    if and(count_v_all(i) == 1, count_v_all(i_) >= 10)
-        is_div_line(i_) = 1; 
-        continue
-    end
-    for j = (2:min(count_v_all(i),count_v_all(i_)))
-        t1 = [x(j,i)-x(j-1,i);y(j,i)-y(j-1,i);z(j,i)-z(j-1,i)];
-        t1 = t1/sqrt(transpose(t1)*t1);
-        t2 = [x(j,i_)-x(j-1,i_);y(j,i_)-y(j-1,i_);z(j,i_)-z(j-1,i_)];
-        t2 = t2/sqrt(transpose(t2)*t2);
-        if transpose(t1)*t2 < 0.5
-            is_div_line(i) = 1;
-            is_div_line(i_) = 1;
-            break
-        end
-    end
-end
-
-%% 
-n_edge = is_div_line*ones(width(x),1);
-div_indices = zeros(1,n_edge);
-count_v = (n_points+1)*ones(1,n_edge);
-x_edge = zeros(n_points+1,n_edge);
-y_edge = zeros(n_points+1,n_edge);
-z_edge = zeros(n_points+1,n_edge);
-count = 0;
-for i = 1:width(x)
-    if is_div_line(i) == 1
-        count = count+1;
-        div_indices(1,count) = i;
-        count_v(1,count) = count_v_all(1,i);
-        x_edge(:,count) = x(:,i);
-        y_edge(:,count) = y(:,i);
-        z_edge(:,count) = z(:,i);
-    end
-end
-
-curv_max = ones(1,n_edge);
-for i_ = 1:n_edge
-    i = div_indices(1,i_);
-    dt_max = 0;
-    for j = 2:(count_v(i_)-1)
-        n = [fx(x(j,i),y(j,i),z(j,i));fy(x(j,i),y(j,i),z(j,i));fz(x(j,i),y(j,i),z(j,i))];
-        n = n/sqrt(transpose(n)*n);
-        t1 = [x(j,i)-x(j-1,i);y(j,i)-y(j-1,i);z(j,i)-z(j-1,i)];
-        t1 = t1/sqrt(transpose(t1)*t1);
-        t2 = [x(j+1,i)-x(j,i);y(j+1,i)-y(j,i);z(j+1,i)-z(j,i)];
-        t2 = t2/sqrt(transpose(t2)*t2);
-        dt = (t2-t1)/ds;
-        dt = dt - (transpose(dt)*n)*n;
-        dt = sqrt(transpose(dt)*(dt));
-        if dt > dt_max
-            dt_max = dt;
-            curv_max(i_) = j;
-        end
-    end
-end
- 
-%%
-
-count = 1;
-reaches_div_point = zeros(1,n_edge);
-for i_ = 1:n_edge-1
-    if curv_max(1,i_) > 2
-        increment_count = false;
-        i1 = div_indices(1,i_);
-        j1 = curv_max(i_);
-        x1 = x(j1,i1);
-        y1 = y(j1,i1);
-        z1 = z(j1,i1);
-        for j_ = i_+1:n_edge
-            if and(curv_max(1,j_) > 2, reaches_div_point(j_) == 0)
-                i2 = div_indices(1,j_);
-                j2 = curv_max(j_);
-                x2 = x(j2,i2);
-                y2 = y(j2,i2);
-                z2 = z(j2,i2);
-                if (x2-x1)^2+(y2-y1)^2+(z2-z1)^2 < (10*ds)^2
-                    if and(reaches_div_point(i_) == 0, reaches_div_point(j_) == 0)
-                        reaches_div_point(i_) = count;
-                        reaches_div_point(j_) = count;
-                        increment_count = true;
-                    elseif reaches_div_point(i_)*reaches_div_point(j_) == 0
-                        reaches_div_point(i_) = max(reaches_div_point(i_),reaches_div_point(j_));
-                        reaches_div_point(j_) = reaches_div_point(i_);
-                    else
-                        reaches_div_point(i_) = min(reaches_div_point(i_),reaches_div_point(j_));
-                        reaches_div_point(j_) = reaches_div_point(i_);
-                    end
-                    count_v(i_) = j1;
-                    count_v_all(div_indices(i_)) = j1;
-                    count_v(j_) = j2;
-                    count_v_all(div_indices(j_)) = j2;
-                    x_edge(j1:end,i_) = x1;
-                    y_edge(j1:end,i_) = y1;
-                    z_edge(j1:end,i_) = z1;
-                    x_edge(j2:end,j_) = x2;
-                    y_edge(j2:end,j_) = y2;
-                    z_edge(j2:end,j_) = z2;
-                end
-            end
-        end
-        if increment_count
-            count = count+1;
-        end
-    end
-end
-
-count = 0;
-p = zeros(max(reaches_div_point),3);
-for i = 1:n_edge
-    if reaches_div_point(i) > count
-        count = reaches_div_point(i);
-        p(count,:) = find_divergence_point(x_edge(count_v(i),i),y_edge(count_v(i),i),...
-            z_edge(count_v(i),i),f_init,ds);
-    end
-    if reaches_div_point(i)
-        count_v(i) = count_v(i)+1;
-        count_v_all(div_indices(i)) = count_v(i);
-        x_edge(count_v(i):end,i) = p(reaches_div_point(i),1);
-        y_edge(count_v(i):end,i) = p(reaches_div_point(i),2);
-        z_edge(count_v(i):end,i) = p(reaches_div_point(i),3);
-        x(:,div_indices(i)) = x_edge(:,i);
-        y(:,div_indices(i)) = y_edge(:,i);
-        z(:,div_indices(i)) = z_edge(:,i);
-    end
-end
-
-for i = 2:n_edge-1
-    if and(div_indices(i) == div_indices(i-1)+1, div_indices(i) == div_indices(i+1)-1)
-        reaches_div_point(i) = reaches_div_point(i-1);
-        [~,I] = min((x_edge(1:count_v(i),i)-p(reaches_div_point(i),1)).^2 ...
-            +(y_edge(1:count_v(i),i)-p(reaches_div_point(i),2)).^2 ...
-            +(z_edge(1:count_v(i),i)-p(reaches_div_point(i),3)).^2);
-        curv_max(i) = I;
-        count_v(i) = I+1;
-        count_v_all(div_indices(i)) = count_v(i);
-        x_edge(count_v(i):end,i) = p(reaches_div_point(i),1);
-        y_edge(count_v(i):end,i) = p(reaches_div_point(i),2);
-        z_edge(count_v(i):end,i) = p(reaches_div_point(i),3);
-        x(:,div_indices(i)) = x_edge(:,i);
-        y(:,div_indices(i)) = y_edge(:,i);
-        z(:,div_indices(i)) = z_edge(:,i);
-    end
-end
-
-clear count increment_count p i i_ j j_ i1 j1 k I x1 x2 y1 y2 z1 z2 t1 t2 dt dt_max
-%%
-
-intersect_index = zeros(max(count_v),n_edge);
-for count = 1:max(reaches_div_point)
-    n_ = 0;
-    indices = zeros(1,n_edge);
-    for i = 1:n_edge
-        if reaches_div_point(i) == count
-            n_ = n_+1;
-            indices(1,n_) = i;
-        end
-    end
-    indices = indices(1,1:n_);
-    x_ = x_edge(:,indices);
-    y_ = y_edge(:,indices);
-    z_ = z_edge(:,indices);
-    for i = 1:n_
-        for j = count_v(indices(i))-2:-1:1
-            I = is_intersecting(j,i,x_,y_,z_,x_(:,[1:i-1,i+1:n_]), y_(:,[1:i-1,i+1:n_]),...
-               z_(:,[1:i-1,i+1:n_]),count_v(indices([1:i-1,i+1:n_]))-1,ds);
-            if I
-                if I(2) >= i
-                    I(2) = I(2)+1;
-                end
-                intersect_index(j,indices(i)) = indices(I(2));
-            end
-        end
-    end
-    p = [x_edge(count_v(indices(1)),indices(1)),y_edge(count_v(indices(1)),indices(1)),...
-        z_edge(count_v(indices(1)),indices(1))];
-    for i = 1:n_
-        i_ = indices(i);
-        for j = count_v(i_)-1:-1:1
-            if intersect_index(j,i_)
-                k = intersect_index(j,i_);
-                common_end = true;
-                for j_ = count_v(k):-1:1
-                    if intersect_index(j_,k) == i_
-                        break
-                    elseif intersect_index(j_,k)
-                        common_end = false;
-                    end
-                end
-                if and(common_end, i_ > k)
-                    break
-                end
-                p1 = [x_edge(j,i_),y_edge(j,i_),z_edge(j,i_)];
-                p2 = [x_edge(j+1,i_),y_edge(j+1,i_),z_edge(j+1,i_)];
-                p12 = (p1+p2)/2;
-                q1 = [x_edge(j_,k), y_edge(j_,k), z_edge(j_,k)];
-                q2 = [x_edge(j_+1,k), y_edge(j_+1,k), z_edge(j_+1,k)];
-                n = [fx(p12(1),p12(2),p12(3));fy(p12(1),p12(2),p12(3));...
-                    fz(p12(1),p12(2),p12(3))];
-                t_ = [(p2(1)-p1(1)),(p2(2)-p1(2)),(p2(3)-p1(3))];
-                nt_ = [n(2)*t_(3)-n(3)*t_(2),n(3)*t_(1)-n(1)*t_(3),...
-                    n(1)*t_(2)-n(2)*t_(1)];
-                nt_ = nt_/sqrt(nt_*transpose(nt_));
-                q_cap = ((q2-q1)/sqrt((q2-q1)*transpose(q2-q1)));
-                q_plane = q1 + q_cap*((p12-q1)*transpose(nt_))/(q_cap*transpose(nt_));
-                q_plane = gradiant_move(q_plane(1),q_plane(2),q_plane(3),f_init,ds);
-                count_v(i_) = j+2;
-                count_v_all(div_indices(i_)) = j+2;
-                x_edge(j+1,i_) = q_plane(1);
-                y_edge(j+1,i_) = q_plane(2);
-                z_edge(j+1,i_) = q_plane(3);
-                x_edge(j+2:end,i_) = p(1);
-                y_edge(j+2:end,i_) = p(2);
-                z_edge(j+2:end,i_) = p(3);
-                x(:,div_indices(i_)) = x_edge(:,i_);
-                y(:,div_indices(i_)) = y_edge(:,i_);
-                z(:,div_indices(i_)) = z_edge(:,i_);
-                if common_end
-                    count_v(k) = j_+2;
-                    count_v_all(div_indices(k)) = j_+2;
-                    x_edge(j_+1,k) = q_plane(1);
-                    y_edge(j_+1,k) = q_plane(2);
-                    z_edge(j_+1,k) = q_plane(3);
-                    x_edge(j_+2:end,k) = p(1);
-                    y_edge(j_+2:end,k) = p(2);
-                    z_edge(j_+2:end,k) = p(3);
-                    x(:,div_indices(k)) = x_edge(:,k);
-                    y(:,div_indices(k)) = y_edge(:,k);
-                    z(:,div_indices(k)) = z_edge(:,k);
-                end
-                break
-            end
-        end
-    end
-    for i = 1:n_
-        i_ = indices(i);
-        if max(intersect_index(:,i_)) == 0
-            x_ = x_edge(:,indices);
-            y_ = y_edge(:,indices);
-            z_ = z_edge(:,indices);
-            j = count_v(i_)-1;      
-            p1 = [x_(j,i),y_(j,i),z_(j,i)];
-            p2 = [x_(j+1,i),y_(j+1,i),z_(j+1,i)];
-            p12 = (p1+p2)/2;
-            n = [fx(p12(1),p12(2),p12(3));fy(p12(1),p12(2),p12(3));...
-                fz(p12(1),p12(2),p12(3))];
-            t_ = [(p2(1)-p1(1)),(p2(2)-p1(2)),(p2(3)-p1(3))];
-            nt_ = [n(2)*t_(3)-n(3)*t_(2),n(3)*t_(1)-n(1)*t_(3),...
-                n(1)*t_(2)-n(2)*t_(1)];
-            nt_ = nt_/sqrt(nt_*transpose(nt_));
-            mid_plane = @(p_) (nt_(1)*(p_(1)-p12(1))...
-                + nt_(2)*(p_(2)-p12(2)) + nt_(3)*(p_(3)-p12(3)));
-            x_arr = abs(x_-p12(1));
-            y_arr = abs(y_-p12(2));
-            z_arr = abs(z_-p12(3));
-            d_arr = (x_arr.^2+y_arr.^2+z_arr.^2);
-            k_ = zeros(1,n_);
-            for i__ = [1:i-1,i+1:n_]
-                [~,I] =  min(d_arr(1:count_v(indices(i__))-1,i__));
-                for j_ = max(I-2,1):min(I+2,count_v(indices(i__))-2)
-                    p1_ = [x_(j_,i__),y_(j_,i__),z_(j_,i__)];
-                    p2_ = [x_(j_+1,i__),y_(j_+1,i__),z_(j_+1,i__)];
-                    p12_ = (p1_+p2_)/2;
-                    if mid_plane(p1_)*mid_plane(p2_) <= 0
-                        n = [fx(p12_(1),p12_(2),p12_(3)),...
-                            fy(p12_(1),p12_(2),p12_(3)),fz(p12_(1),p12_(2),p12_(3))];
-                        if det([(p1-p12_);(p1_-p2_);n])*det([(p2-p12_);(p1_-p2_);n]) <= 0
-                            k_(1,i__) = i__;
-                            break
-                        end
-                    end
-                end
-            end
-            d_min = 0;
-            for i__ = 1:n_
-                if and(i__ ~= i, k_(1,i__))
-                    d_dash = (x_(count_v(indices(i__))-1,i__) - x_(count_v(i_)-1,i))^2 ...
-                        + (y_(count_v(indices(i__))-1,i__) - y_(count_v(i_)-1,i))^2 ...
-                        + (z_(count_v(indices(i__))-1,i__) - z_(count_v(i_)-1,i))^2;
-                    if d_min == 0
-                        d_min = d_dash;
-                        k = i__;
-                    elseif d_dash < d_min
-                        d_min = d_dash;
-                        k = i__;
-                    end
-                end
-            end
-            if d_min
-                [~,I] = min((x_(1:count_v(i_)-1,i)-x_(count_v(indices(k))-1,k)).^2 ...
-                    +(y_(1:count_v(i_)-1,i)-y_(count_v(indices(k))-1,k)).^2 ...
-                    +(z_(1:count_v(i_)-1,i)-z_(count_v(indices(k))-1,k)).^2);
-                count_v(i_) = I+1;
-                count_v_all(div_indices(i_)) = I+1;
-                x_edge(I+1:end,i_) = x_(count_v(indices(k))-1,k);
-                y_edge(I+1:end,i_) = y_(count_v(indices(k))-1,k);
-                z_edge(I+1:end,i_) = z_(count_v(indices(k))-1,k);
-                x(:,div_indices(i_)) = x_edge(:,i_);
-                y(:,div_indices(i_)) = y_edge(:,i_);
-                z(:,div_indices(i_)) = z_edge(:,i_);
-            end
-            clear d_min d_dash k_
-        end
-    end
-    clear indices n_
-end
 %%
 
 frac = 20;
 for i = 1:frac:width(x)
-    if and(~is_div_line(1,i), count_v_all(i) > 1)
+    if count_v_all(i) > 1
         x_ = x(count_v_all(i),i);
         y_ = y(count_v_all(i),i);
         z_ = z(count_v_all(i),i);
@@ -475,7 +156,7 @@ for i = 1:frac:width(x)
                 else
                     I = I*frac + 1;
                 end
-                if is_div_line(I) || count_v_all(I) == 1 || sqrt(M) > frac*ds
+                if count_v_all(I) == 1 || sqrt(M) > frac*ds
                     continue
                 elseif max(abs([x(count_v_all(I),I),y(count_v_all(I),I),z(count_v_all(I),I)])) == Size/2
                     continue
@@ -530,13 +211,13 @@ for i = 1:frac:width(x)
 end
 clear lin_indices M M_ I a j_ frc old_count p x_new y_new z_new
 %%
-%Run from here after loading variables
 
+%Section for merging opposite lines
 for i = 1:frac:width(x)
     i_ = count_v_all(i);
     p = [x(i_,i),y(i_,i),z(i_,i)];
     M = max(abs(p));
-    if is_div_line(i) || count_v_all(i) == 1
+    if count_v_all(i) == 1
         continue
     elseif min(Size/2 - M) > ds || M == Size/2
         continue
@@ -544,7 +225,7 @@ for i = 1:frac:width(x)
     M = Size;
     for j = [1:frac:i-frac,i+frac:frac:width(x)]
         j_ = count_v_all(j);
-        if is_div_line(j) || j_ == 1
+        if j_ == 1
             continue
         end
         p1 = [x(1,j),y(1,j),z(1,j)];
@@ -639,10 +320,7 @@ end
 clear a dir frc I I_ i_ J J_ j_ M M_ M_1 M_2 p p1 p2 x_new y_new z_new
 %%
 
-count_v_all(div_indices) = count_v;
-x(:,div_indices) = x_edge;
-y(:,div_indices) = y_edge;
-z(:,div_indices) = z_edge;
+%Section for assigning numerical indices to all nodes
 x = x(:,1:frac:width(x));
 y = y(:,1:frac:width(y));
 z = z(:,1:frac:width(z));
@@ -668,7 +346,7 @@ for i = 1:width(x)
                 break
             end
         end
-    elseif max(abs([x(I,i),y(I,i),z(I,i)])) ~= Size/2 && ~is_div_line(1+frac*(i-1))
+    elseif max(abs([x(I,i),y(I,i),z(I,i)])) ~= Size/2
         for j = [1:i-1,i+1:width(x)]
             J = count_v_all(j);    
             if ~((x(1,j)-x(1,i))^2+(y(1,j)-y(1,i))^2+(z(1,j)-z(1,i))^2 < (frac*ds)^2) &&...
@@ -737,14 +415,8 @@ for i = 1:width(x)
     mid_point_count(1,i) = floor(count_v_all(i)/2);
 end
 for i = 1:width(x)-1
-    if is_div_line(frac*(i-1)+1)
-        continue 
-    end
     p_i = p_array(mid_point_array(1,i),:);
     for j = i+1:width(x)
-        if is_div_line(frac*(j-1)+1)
-            continue 
-        end
         p_j = p_array(mid_point_array(1,j),:);
         if (p_i-p_j)*transpose(p_i-p_j) < (frac*ds)^2
             mid_point_array(1,j) = mid_point_array(1,i);
@@ -756,17 +428,6 @@ clear I p_i p_j
 
 for i = 1:6
     m = [face_indices(i):face_indices(i+1)-1,face_indices(i)];
-    for k = 1:width(m)-1
-        if is_div_line((face_indices(i)+k-2)*frac+1)
-            m = [m(1:k-1),m(k+1:end)];
-            if k == 1
-                m(1,width(m)) = m(1,1);
-            elseif k == width(m)
-                m(1,1) = m(1,width(m));
-            end
-        end
-    end
-
     array = mid_point_array(m);
     plot3(p_array(array,1),p_array(array,2),p_array(array,3),"-o","MarkerSize",4,"Color","b")
     
@@ -912,16 +573,6 @@ for i = 1:6
 end
 clear array j_max m old_array next_p p p_midpoint
 
-% for i = 1:width(x)
-%     if ~is_div_line(1+frac*(i-1))
-%         plot3(x(1:count_v_all(i),i), y(1:count_v_all(i),i),...
-%             z(1:count_v_all(i),i), "-", "Color", "k")
-%         if count_v_all(i) > 1
-%             scatter3(x(1,i),y(1,i),z(1,i),36,[0 0 1])
-%         end
-%     end
-% end
-
 for i = 1:quad_count
     plot3([p_array(quad_list(i,1),1),p_array(quad_list(i,2),1)],...
         [p_array(quad_list(i,1),2),p_array(quad_list(i,2),2)],...
@@ -992,23 +643,15 @@ for k = 1:n_levels
         end
     end
     for i = 1:width(x)
-        if ~is_div_line(1+frac*(i-1))
-            plot3(x_3D(1:count_v_all(i),i,k), y_3D(1:count_v_all(i),i,k),...
-                z_3D(1:count_v_all(i),i,k), "-", "Color", "k")
-            if count_v_all(i) > 1
-                scatter3(x_3D(1,i,k),y_3D(1,i,k),z_3D(1,i,k),36,[0 0 1])
-                if max(abs([x(count_v_all(i),i),y(count_v_all(i),i),z(count_v_all(i),i)])) ~= Size/2 && ~is_div_line(i)
-                    scatter3(x_3D(count_v_all(i),i,k),y_3D(count_v_all(i),i,k),z_3D(count_v_all(i),i,k),36,[1 0 0])
-                end
+        plot3(x_3D(1:count_v_all(i),i,k), y_3D(1:count_v_all(i),i,k),...
+            z_3D(1:count_v_all(i),i,k), "-", "Color", "k")
+        if count_v_all(i) > 1
+            scatter3(x_3D(1,i,k),y_3D(1,i,k),z_3D(1,i,k),36,[0 0 1])
+            if max(abs([x(count_v_all(i),i),y(count_v_all(i),i),z(count_v_all(i),i)])) ~= Size/2
+                scatter3(x_3D(count_v_all(i),i,k),y_3D(count_v_all(i),i,k),z_3D(count_v_all(i),i,k),36,[1 0 0])
             end
         end
     end
-    % for i = 1:n_edge
-    %     i_ = div_indices(i);
-    %     plot3(x_3D(1:count_v(i),i_,k), y_3D(1:count_v(i),i_,k),z_3D(1:count_v(i),i_,k), "-", "Color", "r")
-    %     j = curv_max(i);
-    %     scatter3(x_3D(j,i_,k),y_3D(j,i_,k),z_3D(j,i_,k),30+reaches_div_point(i),[0 1 0])
-    % end
 end
 %%
 
